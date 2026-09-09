@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#171717">
+<meta name="description" content="Comic Studio - lightweight offline comic creator">
+<link rel="manifest" href="./manifest.webmanifest">
+<title>Comic Studio</title>
+<style>
+*{box-sizing:border-box}
+:root{--bg:#111;--card:#1c1c1c;--card2:#252525;--line:#3b3b3b;--text:#fff;--muted:#aaa;--accent:#ffd43b}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,sans-serif;min-height:100%;touch-action:manipulation}
+button,input,select,textarea{font:inherit}
+button{border:1px solid var(--line);background:var(--card2);color:#fff;border-radius:10px;padding:9px 11px;cursor:pointer}
+button:active{transform:scale(.97)}
+button.primary{background:var(--accent);color:#111;border-color:var(--accent);font-weight:bold}
+button.danger{background:#572020}
+header{position:sticky;top:0;z-index:50;background:#171717;border-bottom:1px solid var(--line);padding:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.logo{font-size:20px;font-weight:bold;margin-right:auto}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap}
+main{max-width:1100px;margin:auto;padding:12px}
+#pages{display:flex;gap:7px;overflow-x:auto;padding:4px 0 10px}
+.pageBtn{min-width:75px}
+.pageBtn.active{outline:2px solid var(--accent)}
+#workspace{display:grid;grid-template-columns:1fr 280px;gap:12px}
+@media(max-width:760px){#workspace{grid-template-columns:1fr}.side{order:2}}
+#stageWrap{background:#080808;border:1px solid var(--line);border-radius:14px;padding:10px;overflow:auto}
+#stage{position:relative;margin:auto;width:min(100%,760px);aspect-ratio:3/4;background:white;overflow:hidden;box-shadow:0 8px 30px #000}
+.panel{position:absolute;border:3px solid #111;background:#eee;overflow:hidden}
+.obj{position:absolute;min-width:40px;min-height:25px;user-select:none;touch-action:none;cursor:move}
+.obj.selected{outline:2px dashed #e8b900;outline-offset:3px}
+.bubble{background:#fff;border:3px solid #111;border-radius:50%;padding:12px 15px;box-shadow:2px 3px 0 #111;white-space:pre-wrap;text-align:center}
+.thought{border-radius:50%}
+.caption{background:#ffd83d;border:2px solid #111;padding:7px 10px;font-weight:bold}
+.sticker{font-size:54px;line-height:1}
+.handle{position:absolute;width:14px;height:14px;background:#ffd43b;border:2px solid #111;border-radius:50%;right:-9px;bottom:-9px;display:none;touch-action:none}
+.rotateHandle{position:absolute;width:14px;height:14px;background:#fff;border:2px solid #111;border-radius:50%;left:50%;top:-24px;transform:translateX(-50%);display:none}
+.selected .handle,.selected .rotateHandle{display:block}
+.side{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.section{border-bottom:1px solid var(--line);padding:0 0 12px;margin-bottom:12px}
+.section:last-child{border:0;margin:0}
+.section h3{font-size:14px;margin:0 0 8px;color:#ddd}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.control{display:flex;gap:7px;align-items:center;margin:7px 0}
+.control label{font-size:12px;color:var(--muted);min-width:65px}
+.control input[type=text],.control input[type=number],.control textarea{width:100%;background:#101010;color:#fff;border:1px solid var(--line);border-radius:8px;padding:7px}
+.control input[type=color]{width:50px;height:35px;padding:2px;background:#111;border:1px solid var(--line)}
+#layers{max-height:190px;overflow:auto}
+.layer{padding:7px;border:1px solid var(--line);border-radius:7px;margin:5px 0;font-size:12px;display:flex;gap:5px;align-items:center}
+.layer.active{outline:2px solid var(--accent)}
+.layer span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.help{color:#999;font-size:12px;line-height:1.4;margin-top:10px}
+.empty{color:#888;text-align:center;padding:20px}
+.toast{position:fixed;bottom:15px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:10px 14px;border-radius:10px;z-index:100;display:none;font-weight:bold}
+#fileInput{display:none}
+</style>
+</head>
+
+<body>
+
+<header>
+<div class="logo">🎨 Comic Studio</div>
+<div class="toolbar">
+<button onclick="addPage()">＋ Page</button>
+<button onclick="undo()">↶</button>
+<button onclick="redo()">↷</button>
+<button onclick="saveProject()">💾 Save</button>
+<button onclick="loadProject()">📂 Load</button>
+<button class="primary" onclick="exportPNG()">📤 PNG</button>
+</div>
+</header>
+
+<main>
+
+<div id="pages"></div>
+
+<div id="workspace">
+
+<div id="stageWrap">
+<div id="stage"></div>
+</div>
+
+<aside class="side">
+
+<div class="section">
+<h3>➕ Add</h3>
+<div class="grid">
+<button onclick="addPanel()">▦ Panel</button>
+<button onclick="addSpeech()">💬 Speech</button>
+<button onclick="addThought()">💭 Thought</button>
+<button onclick="addCaption()">📝 Caption</button>
+<button onclick="addText()">T Text</button>
+<button onclick="addSticker()">⭐ Sticker</button>
+<button onclick="document.getElementById('fileInput').click()">🖼 Image</button>
+<button onclick="duplicateSelected()">⧉ Duplicate</button>
+</div>
+<input id="fileInput" type="file" accept="image/*">
+</div>
+
+<div class="section">
+<h3>🎛 Selected object</h3>
+
+<div class="control">
+<label>X</label>
+<input id="ox" type="number" onchange="changeNum('x',this.value)">
+</div>
+
+<div class="control">
+<label>Y</label>
+<input id="oy" type="number" onchange="changeNum('y',this.value)">
+</div>
+
+<div class="control">
+<label>Scale</label>
+<input id="os" type="number" step=".05" min=".1" max="5" onchange="changeNum('scale',this.value)">
+</div>
+
+<div class="control">
+<label>Rotate</label>
+<input id="or" type="number" onchange="changeNum('rot',this.value)">
+</div>
+
+<div class="control">
+<label>Text</label>
+<textarea id="ot" rows="2" placeholder="Edit selected text" onchange="changeText(this.value)"></textarea>
+</div>
+
+<div class="control">
+<label>Font</label>
+<input id="of" type="number" min="8" max="120" onchange="changeNum('fontSize',this.value)">
+</div>
+
+<div class="control">
+<label>Color</label>
+<input id="oc" type="color" onchange="changeColor(this.value)">
+</div>
+
+<div class="grid">
+<button onclick="moveLayer(-1)">⬆ Front</button>
+<button onclick="moveLayer(1)">⬇ Back</button>
+<button onclick="deleteSelected()" class="danger">🗑 Delete</button>
+</div>
+</div>
+
+<div class="section">
+<h3>📐 Panel layout</h3>
+<div class="grid">
+<button onclick="layout('one')">1 Panel</button>
+<button onclick="layout('two')">2 Panels</button>
+<button onclick="layout('three')">3 Panels</button>
+<button onclick="layout('grid')">4 Grid</button>
+<button onclick="layout('six')">6 Grid</button>
+</div>
+</div>
+
+<div class="section">
+<h3>🎨 Page</h3>
+<div class="control">
+<label>Background</label>
+<input id="pageBg" type="color" value="#ffffff" onchange="setPageBg(this.value)">
+</div>
+
+<div class="grid">
+<button onclick="clearPage()">Clear</button>
+<button onclick="deletePage()" class="danger">Delete Page</button>
+</div>
+</div>
+
+<div class="section">
+<h3>🗂 Layers</h3>
+<div id="layers"></div>
+</div>
+
+<div class="help">
+Drag objects with your finger.
+Use the yellow corner to resize and the top handle to rotate.
+Double-tap text to edit it.
+Your project is automatically saved on this device.
+</div>
+
+</aside>
+</div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const KEY="comic-studio-advanced-v1";
+
+let project={pages:[newPage()]};
+let pageIndex=0;
+let selected=null;
+let history=[];
+let future=[];
+
+function newPage(){
+return{bg:"#fff",objects:[]};
+}
+
+function id(){
+return "o"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+}
+
+function clone(x){
+return JSON.parse(JSON.stringify(x));
+}
+
+function current(){
+return project.pages[pageIndex];
+}
+
+function snapshot(){
+history.push(clone(project));
+if(history.length>40)history.shift();
+future=[];
+localStorage.setItem(KEY,JSON.stringify(project));
+}
+
+function restore(p){
+project=clone(p);
+selected=null;
+render();
+}
+
+function undo(){
+if(!history.length)return;
+future.push(clone(project));
+restore(history.pop());
+}
+
+function redo(){
+if(!future.length)return;
+history.push(clone(project));
+restore(future.pop());
+}
+
+function toast(t){
+let e=document.getElementById("toast");
+e.textContent=t;
+e.style.display="block";
+clearTimeout(toast.t);
+toast.t=setTimeout(()=>e.style.display="none",1600);
+}
+
+function renderPages(){
+let e=document.getElementById("pages");
+e.innerHTML="";
+
+project.pages.forEach((p,i)=>{
+let b=document.createElement("button");
+b.className="pageBtn "+(i===pageIndex?"active":"");
+b.textContent="Page "+(i+1);
+
+b.onclick=()=>{
+pageIndex=i;
+selected=null;
+render();
+};
+
+e.appendChild(b);
+});
+}
+
+function render(){
+renderPages();
+
+let s=document.getElementById("stage");
+s.innerHTML="";
+s.style.background=current().bg;
+
+current().objects.forEach((o,i)=>{
+drawObject(o,i);
+});
+
+updateLayers();
+updateControls();
+}
+
+function drawObject(o,i){
+
+let el=document.createElement("div");
+
+el.className="obj "+(i===selected?"selected":"");
+
+el.dataset.i=i;
+
+el.style.left=o.x+"%";
+el.style.top=o.y+"%";
+
+el.style.transform="rotate("+o.rot+"deg) scale("+o.scale+")";
+el.style.transformOrigin="center center";
+
+if(o.type==="panel"){
+
+el.className="panel "+(i===selected?"selected":"");
+
+el.style.width=o.w+"%";
+el.style.height=o.h+"%";
+el.style.left=o.x+"%";
+el.style.top=o.y+"%";
+
+el.style.transform="rotate("+o.rot+"deg) scale("+o.scale+")";
+
+el.style.background=o.bg||"#eee";
+el.style.zIndex=o.z;
+
+}
+
+else if(o.type==="image"){
+
+let im=document.createElement("img");
+
+im.src=o.src;
+im.style.width="100%";
+im.style.height="100%";
+im.style.objectFit="contain";
+im.draggable=false;
+
+el.style.width=o.w+"%";
+el.style.height=o.h+"%";
+
+el.appendChild(im);
+
+}
+
+else{
+
+el.style.zIndex=o.z;
+
+if(o.type==="speech"||o.type==="thought"){
+el.classList.add("bubble");
+
+if(o.type==="thought"){
+el.classList.add("thought");
+}
+}
+
+if(o.type==="caption"){
+el.classList.add("caption");
+}
+
+if(o.type==="sticker"){
+el.classList.add("sticker");
+}
+
+el.textContent=o.text||"Text";
+el.style.fontSize=o.fontSize+"px";
+el.style.color=o.color||"#111";
+
+el.style.background=
+o.type==="caption"
+?(o.bg||"#ffd83d")
+:(o.bg||"#fff");
+}
+
+let h=document.createElement("div");
+h.className="handle";
+el.appendChild(h);
+
+let r=document.createElement("div");
+r.className="rotateHandle";
+el.appendChild(r);
+
+el.addEventListener("pointerdown",e=>startDrag(e,i));
+
+el.addEventListener("dblclick",e=>{
+if(o.text!==undefined){
+let t=prompt("Edit text:",o.text);
+
+if(t!==null){
+snapshot();
+o.text=t;
+render();
+}
+}
+});
+
+document.getElementById("stage").appendChild(el);
+}
+
+function updateLayers(){
+
+let e=document.getElementById("layers");
+e.innerHTML="";
+
+let a=current().objects.slice().map((o,i)=>({o,i})).reverse();
+
+if(!a.length){
+e.innerHTML='<div class="empty">No objects yet</div>';
+return;
+}
+
+a.forEach(x=>{
+
+let d=document.createElement("div");
+
+d.className="layer "+(x.i===selected?"active":"");
+
+let names={
+panel:"▦ Panel",
+speech:"💬 Speech",
+thought:"💭 Thought",
+caption:"📝 Caption",
+text:"T Text",
+sticker:"⭐ Sticker",
+image:"🖼 Image"
+};
+
+d.innerHTML=
+"<span>"+
+(names[x.o.type]||x.o.type)+
+" "+
+(x.o.text||"")+
+"</span>"+
+"<button>×</button>";
+
+d.querySelector("span").onclick=()=>{
+selected=x.i;
+render();
+};
+
+d.querySelector("button").onclick=()=>{
+selected=x.i;
+deleteSelected();
+};
+
+e.appendChild(d);
+});
+}
+
+function updateControls(){
+
+let o=current().objects[selected];
+
+["ox","oy","os","or","ot","of"].forEach(x=>{
+document.getElementById(x).value="";
+});
+
+if(!o)return;
+
+ox.value=Math.round(o.x*10)/10;
+oy.value=Math.round(o.y*10)/10;
+os.value=o.scale;
+or.value=o.rot;
+of.value=o.fontSize||24;
+ot.value=o.text||"";
+oc.value=o.color||"#111111";
+pageBg.value=current().bg;
+}
+
+function base(type){
+
+return{
+id:id(),
+type:type,
+x:10+Math.random()*20,
+y:10+Math.random()*20,
+scale:1,
+rot:0,
+z:current().objects.length+1,
+fontSize:24,
+color:"#111",
+bg:"#fff",
+text:"Text"
+};
+}
+
+function addObj(o){
+
+snapshot();
+
+current().objects.push(o);
+
+selected=current().objects.length-1;
+
+render();
+
+toast("Added");
+}
+
+function addPanel(){
+
+let o=base("panel");
+
+o.x=5;
+o.y=5;
+o.w=90;
+o.h=40;
+o.bg="#eee";
+
+addObj(o);
+}
+
+function addSpeech(){
+
+let o=base("speech");
+
+o.text="Hello!";
+o.x=25;
+o.y=15;
+
+addObj(o);
+}
+
+function addThought(){
+
+let o=base("thought");
+
+o.text="Hmm...";
+o.x=25;
+o.y=25;
+
+addObj(o);
+}
+
+function addCaption(){
+
+let o=base("caption");
+
+o.text="Meanwhile...";
+o.x=10;
+o.y=5;
+
+addObj(o);
+}
+
+function addText(){
+
+let o=base("text");
+
+o.text="Your text";
+o.x=35;
+o.y=40;
+
+addObj(o);
+}
+
+function addSticker(){
+
+let o=base("sticker");
+
+o.text="⭐";
+o.x=40;
+o.y=40;
+o.fontSize=54;
+
+addObj(o);
+}
+
+document.getElementById("fileInput").addEventListener("change",function(){
+
+let f=this.files[0];
+
+if(!f)return;
+
+let rd=new FileReader();
+
+rd.onload=()=>{
+
+let o=base("image");
+
+o.src=rd.result;
+o.x=15;
+o.y=15;
+o.w=45;
+o.h=35;
+
+addObj(o);
+
+this.value="";
+};
+
+rd.readAsDataURL(f);
+});
+
+function startDrag(e,i){
+
+e.preventDefault();
+
+selected=i;
+
+let o=current().objects[i];
+
+let el=e.currentTarget;
+
+let stage=document.getElementById("stage");
+
+let rect=stage.getBoundingClientRect();
+
+let sx=e.clientX;
+let sy=e.clientY;
+
+let ox=o.x;
+let oy=o.y;
+
+function move(ev){
+
+o.x=Math.max(
+0,
+Math.min(
+95,
+ox+(ev.clientX-sx)/rect.width*100
+)
+);
+
+o.y=Math.max(
+0,
+Math.min(
+95,
+oy+(ev.clientY-sy)/rect.height*100
+)
+);
+
+el.style.left=o.x+"%";
+el.style.top=o.y+"%";
+
+updateControls();
+}
+
+function up(){
+
+document.removeEventListener("pointermove",move);
+document.removeEventListener("pointerup",up);
+
+snapshot();
+render();
+}
+
+document.addEventListener("pointermove",move);
+document.addEventListener("pointerup",up);
+}
+
+function changeNum(k,v){
+
+let o=current().objects[selected];
+
+if(!o)return;
+
+snapshot();
+
+o[k]=parseFloat(v)||0;
+
+render();
+}
+
+function changeText(v){
+
+let o=current().objects[selected];
+
+if(!o||o.text===undefined)return;
+
+snapshot();
+
+o.text=v;
+
+render();
+}
+
+function changeColor(v){
+
+let o=current().objects[selected];
+
+if(!o)return;
+
+snapshot();
+
+o.color=v;
+
+render();
+}
+
+function deleteSelected(){
+
+if(selected===null)return;
+
+snapshot();
+
+current().objects.splice(selected,1);
+
+selected=null;
+
+render();
+
+toast("Deleted");
+}
+
+function duplicateSelected(){
+
+if(selected===null)return;
+
+let o=clone(current().objects[selected]);
+
+o.id=id();
+
+o.x=Math.min(90,o.x+5);
+o.y=Math.min(90,o.y+5);
+
+snapshot();
+
+current().objects.push(o);
+
+selected=current().objects.length-1;
+
+render();
+}
+
+function moveLayer(dir){
+
+if(selected===null)return;
+
+let a=current().objects;
+
+let n=selected;
+let j=selected+dir;
+
+if(j<0||j>=a.length)return;
+
+snapshot();
+
+[a[n],a[j]]=[a[j],a[n]];
+
+selected=j;
+
+render();
+}
+
+function clearPage(){
+
+snapshot();
+
+current().objects=[];
+
+selected=null;
+
+render();
+}
+
+function setPageBg(v){
+
+snapshot();
+
+current().bg=v;
+
+render();
+}
+
+function addPage(){
+
+snapshot();
+
+project.pages.push(newPage());
+
+pageIndex=project.pages.length-1;
+
+selected=null;
+
+render();
+}
+
+function deletePage(){
+
+if(project.pages.length===1){
+
+toast("Keep at least one page");
+
+return;
+}
+
+snapshot();
+
+project.pages.splice(pageIndex,1);
+
+pageIndex=Math.max(0,pageIndex-1);
+
+selected=null;
+
+render();
+}
+
+function layout(kind){
+
+snapshot();
+
+current().objects=current().objects.filter(
+o=>o.type!=="panel"
+);
+
+let a=[];
+
+if(kind==="one")
+a=[[5,5,90,90]];
+
+if(kind==="two")
+a=[
+[5,5,90,43],
+[5,52,90,43]
+];
+
+if(kind==="three")
+a=[
+[5,5,43,90],
+[52,5,43,43],
+[52,52,43,43]
+];
+
+if(kind==="grid")
+a=[
+[5,5,43,43],
+[52,5,43,43],
+[5,52,43,43],
+[52,52,43,43]
+];
+
+if(kind==="six")
+a=[
+[3,3,29,30],
+[35,3,29,30],
+[67,3,30,30],
+[3,36,29,30],
+[35,36,29,30],
+[67,36,30,30]
+];
+
+a.forEach((v,i)=>{
+
+let o=base("panel");
+
+[o.x,o.y,o.w,o.h]=v;
+
+o.z=i+1;
+o.bg="#eee";
+
+current().objects.push(o);
+});
+
+selected=null;
+
+render();
+}
+
+function saveProject(){
+
+localStorage.setItem(
+KEY,
+JSON.stringify(project)
+);
+
+toast("Saved on this device");
+}
+
+function loadProject(){
+
+let x=localStorage.getItem(KEY);
+
+if(x){
+
+project=JSON.parse(x);
+
+pageIndex=0;
+selected=null;
+
+render();
+
+toast("Loaded");
+
+}else{
+
+toast("No saved project");
+}
+}
+
+function exportPNG(){
+
+let s=document.getElementById("stage");
+
+let scale=2;
+
+let c=document.createElement("canvas");
+
+c.width=s.clientWidth*scale;
+c.height=s.clientHeight*scale;
+
+let ctx=c.getContext("2d");
+
+ctx.scale(scale,scale);
+
+ctx.fillStyle=current().bg;
+
+ctx.fillRect(
+0,
+0,
+s.clientWidth,
+s.clientHeight
+);
+
+let objects=current()
+.objects
+.slice()
+.sort((a,b)=>(a.z||0)-(b.z||0));
+
+let pending=objects.length;
+
+function finish(){
+
+pending--;
+
+if(pending<=0){
+
+c.toBlob(b=>{
+
+let a=document.createElement("a");
+
+a.href=URL.createObjectURL(b);
+
+a.download=
+"comic-page-"+(pageIndex+1)+".png";
+
+a.click();
+
+setTimeout(()=>{
+URL.revokeObjectURL(a.href);
+},1000);
+
+},"image/png");
+}
+}
+
+function draw(o){
+
+let x=o.x/100*s.clientWidth;
+let y=o.y/100*s.clientHeight;
+
+let w=(o.w||25)/100*s.clientWidth;
+let h=(o.h||15)/100*s.clientHeight;
+
+ctx.save();
+
+ctx.translate(x,y);
+
+ctx.rotate((o.rot||0)*Math.PI/180);
+
+ctx.scale(o.scale||1,o.scale||1);
+
+if(o.type==="panel"){
+
+ctx.fillStyle=o.bg||"#eee";
+
+ctx.fillRect(0,0,w,h);
+
+ctx.strokeStyle="#111";
+
+ctx.lineWidth=3;
+
+ctx.strokeRect(0,0,w,h);
+
+}
+
+else if(o.type==="image"){
+
+let im=new Image();
+
+im.onload=()=>{
+
+ctx.drawImage(im,0,0,w,h);
+
+ctx.restore();
+
+finish();
+};
+
+im.src=o.src;
+
+return;
+}
+
+else{
+
+ctx.font=
+"bold "+(o.fontSize||24)+"px Arial";
+
+ctx.textAlign="center";
+ctx.textBaseline="middle";
+
+let text=o.text||"Text";
+
+let tw=Math.min(
+s.clientWidth*.7,
+Math.max(
+80,
+ctx.measureText(text).width+30
+)
+);
+
+let th=(o.fontSize||24)*2.1;
+
+if(o.type==="caption"){
+
+ctx.fillStyle=o.bg||"#ffd83d";
+
+ctx.fillRect(
+-10,
+-th/2,
+tw,
+th
+);
+
+}else{
+
+ctx.fillStyle=o.bg||"#fff";
+
+ctx.strokeStyle="#111";
+
+ctx.lineWidth=3;
+
+ctx.beginPath();
+
+ctx.ellipse(
+0,
+0,
+tw/2,
+th/2,
+0,
+0,
+Math.PI*2
+);
+
+ctx.fill();
+
+ctx.stroke();
+}
+
+ctx.fillStyle=o.color||"#111";
+
+ctx.fillText(text,0,0);
+}
+
+ctx.restore();
+
+finish();
+}
+
+if(!pending){
+
+toast("Nothing to export");
+
+return;
+}
+
+objects.forEach(draw);
+}
+
+let saved=localStorage.getItem(KEY);
+
+if(saved){
+
+try{
+project=JSON.parse(saved);
+}catch(e){}
+}
+
+render();
+
+if("serviceWorker" in navigator){
+
+navigator.serviceWorker
+.register("./sw.js")
+.catch(()=>{});
+
+}
+
+</script>
+
+</body>
+  </html>
