@@ -1,4 +1,4 @@
-const CACHE_NAME = "comic-studio-v1";
+const CACHE_NAME = "comic-studio-v2";
 
 const FILES = [
   "./",
